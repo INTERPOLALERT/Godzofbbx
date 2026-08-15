@@ -1,0 +1,62 @@
+name: Build CHAMBER APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Unpack project
+        run: |
+          if [ -f chamber-android-buildfix2.zip ]; then
+            ZIP=chamber-android-buildfix2.zip
+          elif [ -f chamber-android-buildfix1.zip ]; then
+            ZIP=chamber-android-buildfix1.zip
+          elif [ -f chamber-android-with-wrapper.zip ]; then
+            ZIP=chamber-android-with-wrapper.zip
+          else
+            ZIP=$(ls *.zip 2>/dev/null | head -1)
+          fi
+          echo "Using ZIP=$ZIP"
+          unzip -q "$ZIP" -d project
+          if [ -f project/settings.gradle.kts ]; then
+            echo "ROOT=project" >> $GITHUB_ENV
+          elif [ -f project/chamber/settings.gradle.kts ]; then
+            echo "ROOT=project/chamber" >> $GITHUB_ENV
+          else
+            ROOT=$(find project -name settings.gradle.kts | head -1 | xargs dirname)
+            echo "ROOT=$ROOT" >> $GITHUB_ENV
+          fi
+          echo "Using ROOT=${ROOT:-project}"
+          ls -la "${ROOT:-project}"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build debug APK
+        working-directory: ${{ env.ROOT }}
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: chamber-debug-apk
+          path: |
+            **/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
+          
